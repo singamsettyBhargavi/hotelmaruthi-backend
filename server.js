@@ -47,7 +47,8 @@ function isDateOverlap(aStart, aEnd, bStart, bEnd) {
   return !(aEnd <= bStart || aStart >= bEnd);
 }
 
-app.use(cors());
+// app.use(cors());
+app.use(cors({ origin: '*' }));
 app.use(express.json());
 
 // ✅ Get availability
