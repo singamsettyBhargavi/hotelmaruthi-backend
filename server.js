@@ -2,14 +2,15 @@ setInterval(() => {
   fetch("https://hotelmaruthi-backend.onrender.com").then(() => 
     console.log("🌐 Keeping Render awake")
   ).catch(() => {});
-}, 5 * 60 * 1000); // every 5 minutes
+}, 5 * 60 * 1000);
+
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
-// 💌 Brevo API email sender (Render-friendly)
+// 💌 Brevo API email sender
 async function sendBrevoEmail(to, subject, htmlContent) {
   try {
     const response = await fetch("https://api.brevo.com/v3/smtp/email", {
@@ -46,10 +47,8 @@ async function sendBrevoEmail(to, subject, htmlContent) {
 
 const app = express();
 
-// 📁 Room data file
 const ROOM_FILE = './roomData.json';
 
-// 📌 Helper to read room availability
 function readRoomData() {
   if (!fs.existsSync(ROOM_FILE)) {
     fs.writeFileSync(ROOM_FILE, JSON.stringify({ Deluxe: 7, Executive: 7 }, null, 2));
@@ -57,21 +56,17 @@ function readRoomData() {
   return JSON.parse(fs.readFileSync(ROOM_FILE));
 }
 
-// 📌 Helper to write room availability
 function writeRoomData(data) {
   fs.writeFileSync(ROOM_FILE, JSON.stringify(data, null, 2));
 }
 
-// 📦 In-memory bookings
 const bookings = [];
 const totalRooms = { Deluxe: 7, Executive: 7 };
 
-// 🎫 Booking ID generator
 function generateBookingId(roomType, checkin, idx) {
   return 'BK' + checkin.replace(/-/g, '') + '-' + roomType + '-' + idx;
 }
 
-// 📅 Check date overlap
 function isDateOverlap(aStart, aEnd, bStart, bEnd) {
   return !(aEnd <= bStart || aStart >= bEnd);
 }
@@ -100,11 +95,10 @@ app.get('/api/room-availability', (req, res) => {
   res.json(result);
 });
 
-// ✅ Book room
+// ✅ Book room - WITH paymentId support
 app.post('/api/book-room', async (req, res) => {
-  const { roomType, checkin, checkout, customerEmail, customerPhone } = req.body;
-console.log("📥 Received booking:", req.body);
-
+  const { roomType, checkin, checkout, customerEmail, customerPhone, paymentId } = req.body;
+  console.log("📥 Received booking:", req.body);
 
   if (!roomType || !checkin || !checkout || !customerEmail || !customerPhone)
     return res.status(400).json({ error: 'Missing details' });
@@ -123,15 +117,24 @@ console.log("📥 Received booking:", req.body);
   const total = base + gst;
 
   const bookingId = generateBookingId(roomType, checkin, bookings.length + 1);
-  const booking = { bookingId, roomType, checkin, checkout, customerEmail, customerPhone, total };
+  
+  const booking = { 
+    bookingId, 
+    roomType, 
+    checkin, 
+    checkout, 
+    customerEmail, 
+    customerPhone, 
+    total,
+    paymentId: paymentId || null
+  };
+  
   bookings.push(booking);
 
-  // Reduce room count
   availableRooms[roomType] -= 1;
   writeRoomData(availableRooms);
 
   try {
-    // ✅ Owner notification
     await sendBrevoEmail(
       "hotelmaruthivzm9@gmail.com",
       "📢 New Booking Received!",
@@ -147,7 +150,6 @@ console.log("📥 Received booking:", req.body);
       `
     );
 
-    // ✅ Customer confirmation
     await sendBrevoEmail(
       customerEmail,
       "✅ Booking Confirmation - Hotel Maruthi",
@@ -190,8 +192,37 @@ app.delete('/api/cancel-booking', async (req, res) => {
   data[booking.roomType] += 1;
   writeRoomData(data);
 
+  // Process Razorpay refund if eligible
+if (refundAmount > 0 && booking.paymentId) {
   try {
-    // 💌 Customer cancellation
+    const razorpayAuth = Buffer.from(
+      `${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`
+    ).toString('base64');
+
+    const refundRes = await fetch(
+      `https://api.razorpay.com/v1/payments/${booking.paymentId}/refund`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Basic ${razorpayAuth}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ amount: Math.round(refundAmount * 100) }) // paise
+      }
+    );
+    const refundData = await refundRes.json();
+    if (refundRes.ok) {
+      console.log("💰 Refund processed successfully:", refundData);
+    } else {
+      console.error("❌ Razorpay refund failed:", refundData);
+    }
+  } catch (err) {
+    console.error("❌ Refund API error:", err);
+  }
+}
+
+
+  try {
     await sendBrevoEmail(
       booking.customerEmail,
       "❌ Booking Cancelled - Hotel Maruthi",
@@ -208,7 +239,6 @@ app.delete('/api/cancel-booking', async (req, res) => {
       `
     );
 
-    // 📢 Owner notification
     await sendBrevoEmail(
       "hotelmaruthivzm9@gmail.com",
       "🚨 Booking Cancelled by Customer",
