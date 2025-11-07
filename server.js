@@ -1,8 +1,43 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const nodemailer = require('nodemailer');
 const fs = require('fs');
+const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
+
+// 💌 Brevo API email sender (Render-friendly)
+async function sendBrevoEmail(to, subject, htmlContent) {
+  try {
+    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "accept": "application/json",
+        "api-key": process.env.BREVO_SMTP_KEY,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        sender: { name: "Hotel Maruthi", email: "hotelmaruthivzm9@gmail.com" },
+        to: [{ email: to }],
+        subject,
+        htmlContent
+      })
+    });
+
+    const text = await response.text();
+    let data;
+    try { data = JSON.parse(text); } catch { data = text; }
+
+    if (!response.ok) {
+      console.error("❌ Brevo API Error:", response.status, data);
+      return { ok: false, status: response.status, body: data };
+    }
+
+    console.log("📧 Email Sent Successfully:", response.status, data);
+    return { ok: true, status: response.status, body: data };
+  } catch (error) {
+    console.error("❌ Email Sending Failed:", error);
+    return { ok: false, error: String(error) };
+  }
+}
 
 const app = express();
 
@@ -21,17 +56,6 @@ function readRoomData() {
 function writeRoomData(data) {
   fs.writeFileSync(ROOM_FILE, JSON.stringify(data, null, 2));
 }
-
-const transporter = nodemailer.createTransport({
-  host: "smtp-relay.brevo.com",
-  port: 465,
-  secure: true,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.BREVO_SMTP_KEY
-  }
-});
-
 
 // 📦 In-memory bookings
 const bookings = [];
@@ -100,12 +124,27 @@ app.post('/api/book-room', async (req, res) => {
   writeRoomData(availableRooms);
 
   try {
-    // ✅ Send confirmation email
-    await transporter.sendMail({
-     from: `"Hotel Maruthi" <${process.env.EMAIL_USER}>`,
-      to: customerEmail,
-      subject: "✅ Booking Confirmation - Hotel Maruthi",
-      html: `
+    // ✅ Owner notification
+    await sendBrevoEmail(
+      "hotelmaruthi@gmail.com",
+      "📢 New Booking Received!",
+      `
+        <h2>New Booking Alert 🚨</h2>
+        <p><b>Booking ID:</b> ${bookingId}</p>
+        <p><b>Room Type:</b> ${roomType}</p>
+        <p><b>Guest Email:</b> ${customerEmail}</p>
+        <p><b>Guest Phone:</b> ${customerPhone}</p>
+        <p><b>Check-in:</b> ${checkin}</p>
+        <p><b>Check-out:</b> ${checkout}</p>
+        <p><b>Total:</b> ₹${total}</p>
+      `
+    );
+
+    // ✅ Customer confirmation
+    await sendBrevoEmail(
+      customerEmail,
+      "✅ Booking Confirmation - Hotel Maruthi",
+      `
         <h2>Booking Confirmed 🎉</h2>
         <p>Dear Guest,</p>
         <p>Thank you for booking with <b>Hotel Maruthi</b>.</p>
@@ -119,26 +158,10 @@ app.post('/api/book-room', async (req, res) => {
         <p>We look forward to your stay!</p>
         <p>— Hotel Maruthi Team 🏨</p>
       `
-    });
+    );
 
-    // ✅ Send owner notification email
-    await transporter.sendMail({
-    from: `"Hotel Maruthi" <${process.env.EMAIL_USER}>`,
-      to: "hotelmaruthi@gmail.com",
-      subject: "📢 New Booking Received!",
-      html: `
-        <h2>New Booking Alert 🚨</h2>
-        <p><b>Booking ID:</b> ${bookingId}</p>
-        <p><b>Room Type:</b> ${roomType}</p>
-        <p><b>Guest Email:</b> ${customerEmail}</p>
-        <p><b>Guest Phone:</b> ${customerPhone}</p>
-        <p><b>Check-in:</b> ${checkin}</p>
-        <p><b>Check-out:</b> ${checkout}</p>
-        <p><b>Total:</b> ₹${total}</p>
-      `
-    });
   } catch (err) {
-    console.error("❌ Email sending failed:", err);
+    console.error("❌ Email Sending Failed:", err);
   }
 
   res.json({ status: "Booked", booking });
@@ -161,12 +184,11 @@ app.delete('/api/cancel-booking', async (req, res) => {
   writeRoomData(data);
 
   try {
-    // 💌 Send cancellation email to customer
-    await transporter.sendMail({
-    from: `"Hotel Maruthi" <${process.env.EMAIL_USER}>`,
-      to: booking.customerEmail,
-      subject: "❌ Booking Cancelled - Hotel Maruthi",
-      html: `
+    // 💌 Customer cancellation
+    await sendBrevoEmail(
+      booking.customerEmail,
+      "❌ Booking Cancelled - Hotel Maruthi",
+      `
         <h2>Booking Cancelled</h2>
         <p>Dear Guest,</p>
         <p>Your booking with <b>Hotel Maruthi</b> has been cancelled successfully.</p>
@@ -177,20 +199,20 @@ app.delete('/api/cancel-booking', async (req, res) => {
         <p>We hope to serve you again soon.</p>
         <p>— Hotel Maruthi Team 🏨</p>
       `
-    });
+    );
 
-    // 📢 Notify owner
-    await transporter.sendMail({
-    from: `"Hotel Maruthi" <${process.env.EMAIL_USER}>`,
-      to: "hotelmaruthi@gmail.com",
-      subject: "🚨 Booking Cancelled by Customer",
-      html: `
+    // 📢 Owner notification
+    await sendBrevoEmail(
+      "hotelmaruthi@gmail.com",
+      "🚨 Booking Cancelled by Customer",
+      `
         <h2>Booking Cancelled</h2>
         <p><b>Booking ID:</b> ${booking.bookingId}</p>
         <p><b>Room Type:</b> ${booking.roomType}</p>
         <p><b>Customer:</b> ${booking.customerEmail} (${booking.customerPhone})</p>
       `
-    });
+    );
+
   } catch (err) {
     console.error("❌ Failed to send cancellation email:", err);
   }
@@ -219,7 +241,4 @@ app.get('/api/admin/summary', (req, res) => {
 app.get('/', (req, res) => res.send("Hotel Maruthi API Running ✅"));
 
 const PORT = process.env.PORT || 3000;
-transporter.verify()
-  .then(() => console.log('✅ SMTP connected successfully — ready to send emails'))
-  .catch(err => console.error('❌ SMTP connection failed:', err));
 app.listen(PORT, '0.0.0.0', () => console.log(`✅ Server Live: ${PORT}`));
