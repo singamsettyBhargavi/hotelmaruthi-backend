@@ -1,3 +1,8 @@
+setInterval(() => {
+  fetch("https://hotelmaruthi-backend.onrender.com").then(() => 
+    console.log("🌐 Keeping Render awake")
+  ).catch(() => {});
+}, 5 * 60 * 1000); // every 5 minutes
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -98,6 +103,8 @@ app.get('/api/room-availability', (req, res) => {
 // ✅ Book room
 app.post('/api/book-room', async (req, res) => {
   const { roomType, checkin, checkout, customerEmail, customerPhone } = req.body;
+console.log("📥 Received booking:", req.body);
+
 
   if (!roomType || !checkin || !checkout || !customerEmail || !customerPhone)
     return res.status(400).json({ error: 'Missing details' });
@@ -126,7 +133,7 @@ app.post('/api/book-room', async (req, res) => {
   try {
     // ✅ Owner notification
     await sendBrevoEmail(
-      "hotelmaruthi@gmail.com",
+      "hotelmaruthivzm9@gmail.com",
       "📢 New Booking Received!",
       `
         <h2>New Booking Alert 🚨</h2>
@@ -154,7 +161,7 @@ app.post('/api/book-room', async (req, res) => {
         <p><b>Check-out:</b> ${checkout}</p>
         <p><b>Total Amount:</b> ₹${total}</p>
         <hr>
-        <p>For any queries, please contact us at <b>hotelmaruthi@gmail.com</b>.</p>
+        <p>For any queries, please contact us at <b>hotelmaruthivzm9@gmail.com</b>.</p>
         <p>We look forward to your stay!</p>
         <p>— Hotel Maruthi Team 🏨</p>
       `
@@ -203,7 +210,7 @@ app.delete('/api/cancel-booking', async (req, res) => {
 
     // 📢 Owner notification
     await sendBrevoEmail(
-      "hotelmaruthi@gmail.com",
+      "hotelmaruthivzm9@gmail.com",
       "🚨 Booking Cancelled by Customer",
       `
         <h2>Booking Cancelled</h2>
