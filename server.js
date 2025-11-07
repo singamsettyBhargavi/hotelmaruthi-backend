@@ -33,7 +33,7 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-// 📦 in-memory bookings
+// 📦 In-memory bookings
 const bookings = [];
 const totalRooms = { Deluxe: 7, Executive: 7 };
 
@@ -47,8 +47,11 @@ function isDateOverlap(aStart, aEnd, bStart, bEnd) {
   return !(aEnd <= bStart || aStart >= bEnd);
 }
 
-// app.use(cors());
-app.use(cors({ origin: '*' }));
+app.use(cors({
+  origin: ['https://hotelmaruthi.com', 'http://hotelmaruthi.com'],
+  methods: ['GET', 'POST', 'DELETE'],
+  credentials: true
+}));
 app.use(express.json());
 
 // ✅ Get availability
@@ -62,7 +65,6 @@ app.get('/api/room-availability', (req, res) => {
     const overlapping = bookings.filter(b =>
       b.roomType === type && isDateOverlap(checkin, checkout, b.checkin, b.checkout)
     ).length;
-
     result[type] = data[type] - overlapping;
   }
 
@@ -84,7 +86,7 @@ app.post('/api/book-room', async (req, res) => {
   if (overlapping >= availableRooms[roomType])
     return res.status(409).json({ error: 'Room not available' });
 
-  const prices = { Deluxe: 1350, Executive: 1700 };
+  const prices = { Deluxe: 1, Executive: 1 };
   const base = prices[roomType];
   const gst = Math.round(base * 0.05);
   const total = base + gst;
@@ -97,11 +99,53 @@ app.post('/api/book-room', async (req, res) => {
   availableRooms[roomType] -= 1;
   writeRoomData(availableRooms);
 
+  try {
+    // ✅ Send confirmation email
+    await transporter.sendMail({
+      from: '"Hotel Maruthi" <9ad4d0001@smtp-brevo.com>',
+      to: customerEmail,
+      subject: "✅ Booking Confirmation - Hotel Maruthi",
+      html: `
+        <h2>Booking Confirmed 🎉</h2>
+        <p>Dear Guest,</p>
+        <p>Thank you for booking with <b>Hotel Maruthi</b>.</p>
+        <p><b>Booking ID:</b> ${bookingId}</p>
+        <p><b>Room Type:</b> ${roomType}</p>
+        <p><b>Check-in:</b> ${checkin}</p>
+        <p><b>Check-out:</b> ${checkout}</p>
+        <p><b>Total Amount:</b> ₹${total}</p>
+        <hr>
+        <p>For any queries, please contact us at <b>hotelmaruthi@gmail.com</b>.</p>
+        <p>We look forward to your stay!</p>
+        <p>— Hotel Maruthi Team 🏨</p>
+      `
+    });
+
+    // ✅ Send owner notification email
+    await transporter.sendMail({
+      from: '"Hotel Maruthi" <9ad4d0001@smtp-brevo.com>',
+      to: "hotelmaruthi@gmail.com",
+      subject: "📢 New Booking Received!",
+      html: `
+        <h2>New Booking Alert 🚨</h2>
+        <p><b>Booking ID:</b> ${bookingId}</p>
+        <p><b>Room Type:</b> ${roomType}</p>
+        <p><b>Guest Email:</b> ${customerEmail}</p>
+        <p><b>Guest Phone:</b> ${customerPhone}</p>
+        <p><b>Check-in:</b> ${checkin}</p>
+        <p><b>Check-out:</b> ${checkout}</p>
+        <p><b>Total:</b> ₹${total}</p>
+      `
+    });
+  } catch (err) {
+    console.error("❌ Email sending failed:", err);
+  }
+
   res.json({ status: "Booked", booking });
 });
 
 // ❌ Cancel booking
-app.delete('/api/cancel-booking', (req, res) => {
+app.delete('/api/cancel-booking', async (req, res) => {
   const id = req.query.id;
   const idx = bookings.findIndex(b => b.bookingId === id);
   if (idx === -1) return res.status(404).json({ error: "Not found" });
@@ -109,11 +153,49 @@ app.delete('/api/cancel-booking', (req, res) => {
   const booking = bookings[idx];
   bookings.splice(idx, 1);
 
+  const today = new Date().toISOString().split("T")[0];
+  const refundAmount = today < booking.checkin ? booking.total * 0.5 : 0;
+
   const data = readRoomData();
-  data[booking.roomType] += 1; // add back room
+  data[booking.roomType] += 1;
   writeRoomData(data);
 
-  res.json({ status: "Cancelled", refundAmount: 0 });
+  try {
+    // 💌 Send cancellation email to customer
+    await transporter.sendMail({
+      from: '"Hotel Maruthi" <9ad4d0001@smtp-brevo.com>',
+      to: booking.customerEmail,
+      subject: "❌ Booking Cancelled - Hotel Maruthi",
+      html: `
+        <h2>Booking Cancelled</h2>
+        <p>Dear Guest,</p>
+        <p>Your booking with <b>Hotel Maruthi</b> has been cancelled successfully.</p>
+        <p><b>Booking ID:</b> ${booking.bookingId}</p>
+        <p><b>Room Type:</b> ${booking.roomType}</p>
+        <p><b>Refund Amount:</b> ₹${refundAmount}</p>
+        <hr>
+        <p>We hope to serve you again soon.</p>
+        <p>— Hotel Maruthi Team 🏨</p>
+      `
+    });
+
+    // 📢 Notify owner
+    await transporter.sendMail({
+      from: '"Hotel Maruthi" <9ad4d0001@smtp-brevo.com>',
+      to: "hotelmaruthi@gmail.com",
+      subject: "🚨 Booking Cancelled by Customer",
+      html: `
+        <h2>Booking Cancelled</h2>
+        <p><b>Booking ID:</b> ${booking.bookingId}</p>
+        <p><b>Room Type:</b> ${booking.roomType}</p>
+        <p><b>Customer:</b> ${booking.customerEmail} (${booking.customerPhone})</p>
+      `
+    });
+  } catch (err) {
+    console.error("❌ Failed to send cancellation email:", err);
+  }
+
+  res.json({ status: "Cancelled", refundAmount });
 });
 
 // 🧑‍💼 Admin - update room availability
@@ -134,24 +216,7 @@ app.get('/api/admin/summary', (req, res) => {
   });
 });
 
-// ✅ Admin Login API
-const ADMIN_USER = process.env.ADMIN_USER || "admin";
-const ADMIN_PASS = process.env.ADMIN_PASS || "maruthi123";
-
-app.post('/api/admin/login', (req, res) => {
-  const { username, password } = req.body;
-
-  if (username === ADMIN_USER && password === ADMIN_PASS) {
-    return res.json({ success: true, message: "Login successful" });
-  } else {
-    return res.status(401).json({ success: false, message: "Invalid credentials" });
-  }
-});
-
-
 app.get('/', (req, res) => res.send("Hotel Maruthi API Running ✅"));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => console.log(`✅ Server Live: ${PORT}`));
-
-
