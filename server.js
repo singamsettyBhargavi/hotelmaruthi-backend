@@ -22,16 +22,16 @@ function writeRoomData(data) {
   fs.writeFileSync(ROOM_FILE, JSON.stringify(data, null, 2));
 }
 
-// 💌 Brevo SMTP setup
 const transporter = nodemailer.createTransport({
   host: "smtp-relay.brevo.com",
-  port: 587,
-  secure: false,
+  port: 465,
+  secure: true,
   auth: {
-    user: "9ad4d0001@smtp-brevo.com",
+    user: process.env.EMAIL_USER,
     pass: process.env.BREVO_SMTP_KEY
   }
 });
+
 
 // 📦 In-memory bookings
 const bookings = [];
@@ -102,7 +102,7 @@ app.post('/api/book-room', async (req, res) => {
   try {
     // ✅ Send confirmation email
     await transporter.sendMail({
-      from: '"Hotel Maruthi" <9ad4d0001@smtp-brevo.com>',
+     from: `"Hotel Maruthi" <${process.env.EMAIL_USER}>`,
       to: customerEmail,
       subject: "✅ Booking Confirmation - Hotel Maruthi",
       html: `
@@ -123,7 +123,7 @@ app.post('/api/book-room', async (req, res) => {
 
     // ✅ Send owner notification email
     await transporter.sendMail({
-      from: '"Hotel Maruthi" <9ad4d0001@smtp-brevo.com>',
+    from: `"Hotel Maruthi" <${process.env.EMAIL_USER}>`,
       to: "hotelmaruthi@gmail.com",
       subject: "📢 New Booking Received!",
       html: `
@@ -163,7 +163,7 @@ app.delete('/api/cancel-booking', async (req, res) => {
   try {
     // 💌 Send cancellation email to customer
     await transporter.sendMail({
-      from: '"Hotel Maruthi" <9ad4d0001@smtp-brevo.com>',
+    from: `"Hotel Maruthi" <${process.env.EMAIL_USER}>`,
       to: booking.customerEmail,
       subject: "❌ Booking Cancelled - Hotel Maruthi",
       html: `
@@ -181,7 +181,7 @@ app.delete('/api/cancel-booking', async (req, res) => {
 
     // 📢 Notify owner
     await transporter.sendMail({
-      from: '"Hotel Maruthi" <9ad4d0001@smtp-brevo.com>',
+    from: `"Hotel Maruthi" <${process.env.EMAIL_USER}>`,
       to: "hotelmaruthi@gmail.com",
       subject: "🚨 Booking Cancelled by Customer",
       html: `
@@ -219,4 +219,7 @@ app.get('/api/admin/summary', (req, res) => {
 app.get('/', (req, res) => res.send("Hotel Maruthi API Running ✅"));
 
 const PORT = process.env.PORT || 3000;
+transporter.verify()
+  .then(() => console.log('✅ SMTP connected successfully — ready to send emails'))
+  .catch(err => console.error('❌ SMTP connection failed:', err));
 app.listen(PORT, '0.0.0.0', () => console.log(`✅ Server Live: ${PORT}`));
