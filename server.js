@@ -223,23 +223,40 @@ if (refundAmount > 0 && booking.paymentId) {
 
 
   try {
-    await sendBrevoEmail(
-      booking.customerEmail,
-      "❌ Booking Cancelled - Hotel Maruthi",
-      `
-        <h2>Booking Cancelled</h2>
-        <p>Dear Guest,</p>
-        <p>Your booking with <b>Hotel Maruthi</b> has been cancelled successfully.</p>
-        <p><b>Booking ID:</b> ${booking.bookingId}</p>
-        <p><b>Room Type:</b> ${booking.roomType}</p>
-        <p><b>Refund Amount:</b> ₹${refundAmount}</p>
-        <hr>
-        <p>We hope to serve you again soon.</p>
-        <p>— Hotel Maruthi Team 🏨</p>
-      `
-    );
+   await sendBrevoEmail(
+  booking.customerEmail,
+  "❌ Booking Cancelled & Refund Processed - Hotel Maruthi",
+  `
+    <div style="font-family:Arial,sans-serif;max-width:490px;color:#222;">
+      <h2 style="color:#c0392b;">Booking Cancelled & Refund Initiated</h2>
+      <p>Dear Guest,</p>
+      <p>Your booking at <b>Hotel Maruthi</b> has been <span style="color:#de0b0b;">cancelled</span> and a refund is being processed.</p>
+      <ul style="margin-bottom:0.7em;">
+        <li><b>Booking ID:</b> ${booking.bookingId}</li>
+        <li><b>Room Type:</b> ${booking.roomType}</li>
+        <li><b>Check-in:</b> ${booking.checkin}</li>
+        <li><b>Check-out:</b> ${booking.checkout}</li>
+        <li><b>Refund Amount:</b> ₹${refundAmount} <br>
+            <span style="color:#009688;">(You will receive the refund to your original payment method within 2-5 business days.)</span>
+        </li>
+      </ul>
+      <div style="background:#f3f7ff;border-left:4px solid #007bff;padding:10px 16px;margin:18px 0 6px 0;font-size:0.98em;">
+        <b>Our Cancellation Policy:</b><br>
+        <ul>
+          <li>15+ days before arrival: <b>Full refund</b></li>
+          <li>7-15 days before: <b>50% refund</b></li>
+          <li>3-7 days before: <b>25% refund</b></li>
+          <li>&lt;72 hours before: <b>No refund</b></li>
+        </ul>
+      </div>
+      <hr>
+      <p style="color:#666;">If you have questions, reply to this email or contact us at <a href="mailto:hotelmaruthivzm9@gmail.com" style="color:#007bff;text-decoration:none;">hotelmaruthivzm9@gmail.com</a>.</p>
+      <p style="color:#008a1a;">We hope to welcome you again soon!<br>— Hotel Maruthi Team 🏨</p>
+    </div>
+  `
+);
 
-    await sendBrevoEmail(
+ await sendBrevoEmail(
       "hotelmaruthivzm9@gmail.com",
       "🚨 Booking Cancelled by Customer",
       `

@@ -9,6 +9,6 @@
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^4.19.2",
-    "nodemailer": "^7.0.10"
+    "node-fetch": "^2.7.0"
   }
 }
