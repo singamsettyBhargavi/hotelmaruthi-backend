@@ -111,7 +111,7 @@ app.post('/api/book-room', async (req, res) => {
   if (overlapping >= availableRooms[roomType])
     return res.status(409).json({ error: 'Room not available' });
 
-  const prices = { Deluxe: 1, Executive: 1 };
+  const prices = { Deluxe: 1350, Executive: 1700 };
   const base = prices[roomType];
   const gst = Math.round(base * 0.05);
   const total = base + gst;
@@ -293,6 +293,11 @@ app.get('/api/admin/summary', (req, res) => {
 });
 
 app.get('/', (req, res) => res.send("Hotel Maruthi API Running ✅"));
+
+// At the end of your server.js, before app.listen:
+app.get('/api/admin/bookings', (req, res) => {
+  res.json(bookings); // Returns all current bookings
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => console.log(`✅ Server Live: ${PORT}`));
