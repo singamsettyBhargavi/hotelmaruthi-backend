@@ -72,10 +72,17 @@ function isDateOverlap(aStart, aEnd, bStart, bEnd) {
 }
 
 app.use(cors({
-  origin: ['https://hotelmaruthi.com', 'http://hotelmaruthi.com'],
+  origin: [
+    'https://hotelmaruthi.com',
+    'http://hotelmaruthi.com',
+    'https://www.hotelmaruthi.com',
+    'http://www.hotelmaruthi.com'
+  ],
   methods: ['GET', 'POST', 'DELETE'],
   credentials: true
 }));
+
+
 app.use(express.json());
 
 // ✅ Get availability
@@ -111,24 +118,50 @@ app.post('/api/book-room', async (req, res) => {
   if (overlapping >= availableRooms[roomType])
     return res.status(409).json({ error: 'Room not available' });
 
-  const prices = { Deluxe: 1, Executive: 1 };
-  const base = prices[roomType];
-  const gst = Math.round(base * 0.05);
-  const total = base + gst;
+  //code change
+const basePrices = { Deluxe: 1350, Executive: 1700 }; 
+const includedAdults = 2;
+const includedChildren = 2;
+const extraBedCharge = 400;
 
-  const bookingId = generateBookingId(roomType, checkin, bookings.length + 1);
+const { adults, children, childrenAges } = req.body; // childrenAges must be sent from frontend as comma string ("10,14") or array
+
+let childrenAgesArr = [];
+if (childrenAges && typeof childrenAges === "string") {
+  childrenAgesArr = childrenAges.split(",").map(a => parseInt(a.trim())).filter(a => !isNaN(a));
+}
+while (childrenAgesArr.length < children) {
+  childrenAgesArr.push(13); // Default to 13 (charged) if missing
+}
+
+const chargedChildren = childrenAgesArr.filter(age => age >= 13).length;
+const extraAdults = Math.max(0, adults - includedAdults);
+
+const extraBeds = extraAdults + chargedChildren;
+const subtotalRoom = basePrices[roomType];   // Only once, not per night!
+const subtotalExtra = extraBeds * extraBedCharge; // Only once, not per night
+const gst = Math.round(subtotalRoom * 0.05); // GST only on room
+const total = subtotalRoom + subtotalExtra + gst;
+
+
+
+
+const bookingId = generateBookingId(roomType, checkin, bookings.length + 1);
   
-  const booking = { 
-    bookingId, 
-    roomType, 
-    checkin, 
-    checkout, 
-    customerEmail, 
-    customerPhone, 
-    total,
-    paymentId: paymentId || null,
-    status: "BOOKED"
-  };
+const booking = {
+  bookingId,
+  roomType,
+  checkin,
+  checkout,
+  customerEmail,
+  customerPhone,
+  adults,
+  children,
+  total,
+  paymentId: paymentId || null,
+  status: "BOOKED"
+};
+
   
   bookings.push(booking);
 
@@ -186,8 +219,9 @@ app.delete('/api/cancel-booking', async (req, res) => {
   const booking = bookings[idx];
   bookings.splice(idx, 1);
 
-  const today = new Date().toISOString().split("T")[0];
-  const refundAmount = today < booking.checkin ? booking.total * 0.5 : 0;
+const today = new Date().toISOString().split("T")[0];
+// If cancelling before check-in date, refund 70% of total. On/after check-in, no refund.
+const refundAmount = today < booking.checkin ? booking.total * 0.7 : 0;
 
   const data = readRoomData();
   data[booking.roomType] += 1;
@@ -241,15 +275,14 @@ if (refundAmount > 0 && booking.paymentId) {
             <span style="color:#009688;">(You will receive the refund to your original payment method within 2-5 business days.)</span>
         </li>
       </ul>
-      <div style="background:#f3f7ff;border-left:4px solid #007bff;padding:10px 16px;margin:18px 0 6px 0;font-size:0.98em;">
-        <b>Our Cancellation Policy:</b><br>
-        <ul>
-          <li>15+ days before arrival: <b>Full refund</b></li>
-          <li>7-15 days before: <b>50% refund</b></li>
-          <li>3-7 days before: <b>25% refund</b></li>
-          <li>&lt;72 hours before: <b>No refund</b></li>
-        </ul>
-      </div>
+     <div style="background:#f3f7ff;border-left:4px solid #007bff;padding:10px 16px;margin:18px 0 6px 0;font-size:0.98em;">
+  <b>Our Cancellation Policy:</b><br>
+  <ul>
+    <li>Cancel <b>before check-in date</b>: <b>70% refund</b></li>
+    <li>Cancel on check-in date or later: <b>No refund</b></li>
+  </ul>
+</div>
+
       <hr>
       <p style="color:#666;">If you have questions, reply to this email or contact us at <a href="mailto:hotelmaruthivzm9@gmail.com" style="color:#007bff;text-decoration:none;">hotelmaruthivzm9@gmail.com</a>.</p>
       <p style="color:#008a1a;">We hope to welcome you again soon!<br>— Hotel Maruthi Team 🏨</p>
