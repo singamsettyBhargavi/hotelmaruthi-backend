@@ -10,6 +10,25 @@ const cors = require('cors');
 const fs = require('fs');
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
+const BOOKINGS_FILE = './bookingsData.json';
+
+// Read all bookings from file
+function readBookings() {
+  if (!fs.existsSync(BOOKINGS_FILE)) {
+    fs.writeFileSync(BOOKINGS_FILE, JSON.stringify([], null, 2));
+  }
+  return JSON.parse(fs.readFileSync(BOOKINGS_FILE));
+}
+
+// Write bookings to file
+function writeBookings(data) {
+  fs.writeFileSync(BOOKINGS_FILE, JSON.stringify(data, null, 2));
+}
+
+// Replace your old in-memory array with this:
+let bookings = readBookings();
+
+
 // 💌 Brevo API email sender
 async function sendBrevoEmail(to, subject, htmlContent) {
   try {
@@ -60,7 +79,7 @@ function writeRoomData(data) {
   fs.writeFileSync(ROOM_FILE, JSON.stringify(data, null, 2));
 }
 
-const bookings = [];
+// const bookings = [];
 const totalRooms = { Deluxe: 7, Executive: 7 };
 
 function generateBookingId(roomType, checkin, idx) {
@@ -328,8 +347,56 @@ app.get('/api/admin/summary', (req, res) => {
 
 app.get('/', (req, res) => res.send("Hotel Maruthi API Running ✅"));
 
-// At the end of your server.js, before app.listen:
-// 🧾 Owner-only Booking & Cancel History
+const ADMIN_EMAIL = "hotelmaruthivzm9@gmail.com"; // Change as needed
+
+function sendCheckoutNotifications() {
+  const today = new Date();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+  const todayStr = today.toISOString().split('T')[0];
+  const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+  // Notify for checkouts today or tomorrow
+  const upcomingCheckouts = bookings.filter(b =>
+    b.checkout === todayStr || b.checkout === tomorrowStr
+  );
+  upcomingCheckouts.forEach(b => {
+    sendBrevoEmail(
+      ADMIN_EMAIL,
+      `🔔 Checkout Reminder for ${b.roomType} (Booking ${b.bookingId})`,
+      `<p>Checkout is happening ${b.checkout === todayStr ? "today" : "tomorrow"} for Booking:<br>
+         <b>Room Type:</b> ${b.roomType}<br>
+         <b>Guest:</b> ${b.customerEmail} (${b.customerPhone})<br>
+         <b>Check-in:</b> ${b.checkin}<br>
+         <b>Check-out:</b> ${b.checkout}</p>`
+    );
+   sendBrevoEmail(
+  b.customerEmail,
+  `🔔 Reminder: Check-out soon at Hotel Maruthi`,
+  `<p>Dear Guest,<br>Your checkout is scheduled for ${b.checkout}. If you need assistance, let us know!<br>— Hotel Maruthi</p>`
+)
+});
+}
+
+// Run every day at 8 am (setInterval in dev, use cron in production)
+setInterval(sendCheckoutNotifications, 24 * 60 * 60 * 1000); // daily
+
+function pruneOldBookings() {
+  const now = new Date();
+  const twoMonthsAgo = new Date();
+  twoMonthsAgo.setMonth(now.getMonth() - 2);
+
+  // Keep only bookings with check-in or checkout after twoMonthsAgo
+  const filtered = bookings.filter(b =>
+    new Date(b.checkin) >= twoMonthsAgo || new Date(b.checkout) >= twoMonthsAgo
+  );
+  if (filtered.length !== bookings.length) {
+    bookings = filtered;
+    writeBookings(bookings);
+    console.log("🗑️ Old bookings pruned, only last 2 months kept.");
+  }
+}
+setInterval(pruneOldBookings, 24 * 60 * 60 * 1000);
 app.get('/api/admin/history', (req, res) => {
   res.json(bookings); // Send in-memory booking data
 });
