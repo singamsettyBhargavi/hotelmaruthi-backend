@@ -396,7 +396,8 @@ function pruneOldBookings() {
     console.log("🗑️ Old bookings pruned, only last 2 months kept.");
   }
 }
-setInterval(pruneOldBookings, 24 * 60 * 60 * 1000);
+setInterval(pruneOldBookings, 24 * 60 * 60 * 1000); // Run daily
+
 app.get('/api/admin/history', (req, res) => {
   res.json(bookings); // Send in-memory booking data
 });
