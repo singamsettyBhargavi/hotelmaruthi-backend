@@ -95,11 +95,14 @@ app.use(cors({
     'https://hotelmaruthi.com',
     'http://hotelmaruthi.com',
     'https://www.hotelmaruthi.com',
-    'http://www.hotelmaruthi.com'
+    'http://www.hotelmaruthi.com',
+    'http://localhost:5500',
+    'http://127.0.0.1:5500'     // Add your local development addresses!
   ],
   methods: ['GET', 'POST', 'DELETE'],
   credentials: true
 }));
+
 
 
 app.use(express.json());
@@ -347,7 +350,7 @@ app.get('/api/admin/summary', (req, res) => {
 
 app.get('/', (req, res) => res.send("Hotel Maruthi API Running ✅"));
 
-const ADMIN_EMAIL = "hotelmaruthivzm9@gmail.com"; // Change as needed
+const ADMIN_EMAIL = "hotelmaruthivzm9@gmail.com"; 
 
 function sendCheckoutNotifications() {
   const today = new Date();
@@ -373,7 +376,7 @@ function sendCheckoutNotifications() {
    sendBrevoEmail(
   b.customerEmail,
   `🔔 Reminder: Check-out soon at Hotel Maruthi`,
-  `<p>Dear Guest,<br>Your checkout is scheduled for ${b.checkout}. If you need assistance, let us know!<br>— Hotel Maruthi</p>`
+  `<p>Dear Guest,<br>Your checkout is scheduled for ${b.checkout}. If you need assistance, let us know!<br>- Hotel Maruthi</p>`
 )
 });
 }
